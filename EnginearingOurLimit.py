@@ -1,111 +1,130 @@
 import numpy as np
+import pandas as pd
 
-nInst = 50
-currentPos = np.zeros(nInst)
-
-# Lookback periods for moving averages
+# Parameters for the strategy
 short_lookback = 10
 long_lookback = 30
-
-# Commission rate
-commission_rate = 0.0010
-
-# Position limit in dollars
-position_limit = 10000
-
-# Minimum price movement threshold to trigger a trade (to reduce trading frequency)
-price_threshold = 0.01  # 1% price change
-
-# Holding period to avoid frequent trading
-holding_period = 5
-last_trade_time = np.zeros(nInst)
-
-# RSI parameters
 rsi_period = 14
 overbought_threshold = 70
 oversold_threshold = 30
+commission_rate = 0.0010
+position_limit = 10000
+fibonacci_lookback = 30
+bollinger_band_period = 20
+stochastic_period = 14
+macd_short_period = 12
+macd_long_period = 26
+macd_signal_period = 9
+
+# Weights for the signals
+momentum_weight = 1
+rsi_weight = 2
+fibonacci_weight = 1
+bollinger_weight = 1
+stochastic_weight = 1
+macd_weight = 2
+
+# Risk management parameters
+stop_loss_threshold = 0.02  # 2% stop loss
+take_profit_threshold = 0.04  # 4% take profit
+
+def calculate_moving_average(prices, period):
+    if len(prices) < period:
+        return np.mean(prices)
+    return np.mean(prices[-period:])
 
 def calculate_rsi(prices, period):
+    if len(prices) < period:
+        return 50  # Neutral RSI if not enough data
     delta = np.diff(prices)
     gain = np.maximum(delta, 0)
     loss = -np.minimum(delta, 0)
-    avg_gain = np.mean(gain[-period:])
-    avg_loss = np.mean(loss[-period:])
-    rs = avg_gain / avg_loss
+    avg_gain = np.mean(gain[-period:]) if len(gain) >= period else np.mean(gain)
+    avg_loss = np.mean(loss[-period:]) if len(loss) >= period else np.mean(loss)
+    rs = avg_gain / avg_loss if avg_loss != 0 else np.inf
     rsi = 100 - (100 / (1 + rs))
     return rsi
 
+def calculate_fibonacci_levels(prices, period):
+    if len(prices) < period:
+        return [0, 0, 0, 0, 0]
+    highest = np.max(prices[-period:])
+    lowest = np.min(prices[-period:])
+    diff = highest - lowest
+    levels = [
+        highest - diff * 0.236,
+        highest - diff * 0.382,
+        highest - diff * 0.500,
+        highest - diff * 0.618,
+        highest - diff * 0.764
+    ]
+    return levels
+
+def calculate_bollinger_bands(prices, period):
+    if len(prices) < period:
+        return np.mean(prices), np.mean(prices), np.mean(prices)
+    sma = calculate_moving_average(prices, period)
+    std = np.std(prices[-period:])
+    upper_band = sma + (std * 2)
+    lower_band = sma - (std * 2)
+    return upper_band, sma, lower_band
+
+def calculate_stochastic_oscillator(prices, period):
+    if len(prices) < period:
+        return 50  # Neutral Stochastic Oscillator if not enough data
+    low = np.min(prices[-period:])
+    high = np.max(prices[-period:])
+    k = ((prices[-1] - low) / (high - low)) * 100
+    return k
+
+def calculate_macd(prices, short_period, long_period, signal_period):
+    if len(prices) < long_period:
+        return 0, 0  # Neutral MACD if not enough data
+    short_ema = pd.Series(prices).ewm(span=short_period, min_periods=short_period).mean().values
+    long_ema = pd.Series(prices).ewm(span=long_period, min_periods=long_period).mean().values
+    macd = short_ema - long_ema
+    signal = pd.Series(macd).ewm(span=signal_period, min_periods=signal_period).mean().values
+    return macd[-1], signal[-1]
+
 def getMyPosition(prcSoFar):
-    global currentPos, last_trade_time
-    (nIns, nt) = prcSoFar.shape
-    if (nt < long_lookback + 1):
-        return np.zeros(nIns)
+    nInst, t = prcSoFar.shape
+    newPos = np.zeros(nInst)
 
-    # Calculate short-term and long-term moving averages
-    short_mavg = np.mean(prcSoFar[:, -short_lookback:], axis=1)
-    long_mavg = np.mean(prcSoFar[:, -long_lookback:], axis=1)
+    for i in range(nInst):
+        prices = prcSoFar[i, :]
 
-    # Calculate RSI
-    rsi = np.array([calculate_rsi(prcSoFar[i, :], rsi_period) for i in range(nIns)])
+        # Calculate indicators
+        momentum = prices[-1] - prices[-short_lookback] if t >= short_lookback else 0
+        rsi = calculate_rsi(prices, rsi_period)
+        fibonacci_levels = calculate_fibonacci_levels(prices, fibonacci_lookback)
+        upper_band, sma, lower_band = calculate_bollinger_bands(prices, bollinger_band_period)
+        stochastic_k = calculate_stochastic_oscillator(prices, stochastic_period)
+        macd, signal = calculate_macd(prices, macd_short_period, macd_long_period, macd_signal_period)
 
-    # Calculate log returns for the last period
-    lastRet = np.log(prcSoFar[:, -1] / prcSoFar[:, -2])
+        # Calculate signals
+        momentum_signal = np.sign(momentum)
+        rsi_signal = -1 if rsi > overbought_threshold else (1 if rsi < oversold_threshold else 0)
+        fibonacci_signal = 1 if prices[-1] < fibonacci_levels[2] else -1
+        bollinger_signal = 1 if prices[-1] < lower_band else (-1 if prices[-1] > upper_band else 0)
+        stochastic_signal = 1 if stochastic_k < 20 else (-1 if stochastic_k > 80 else 0)
+        macd_signal = 1 if macd > signal else -1
 
-    # Calculate volatility
-    volatility = np.std(prcSoFar[:, -long_lookback:], axis=1)
+        # Combine signals with weights
+        combined_signal = (
+            momentum_weight * momentum_signal +
+            rsi_weight * rsi_signal +
+            fibonacci_weight * fibonacci_signal +
+            bollinger_weight * bollinger_signal +
+            stochastic_weight * stochastic_signal +
+            macd_weight * macd_signal
+        )
 
-    # Calculate the normalized returns
-    lNorm = np.sqrt(lastRet.dot(lastRet))
-    normalized_ret = lastRet / lNorm
+        # Determine position
+        if combined_signal > 0:
+            newPos[i] = 1  # Buy
+        elif combined_signal < 0:
+            newPos[i] = -1  # Sell
+        else:
+            newPos[i] = 0  # Hold
 
-    # Calculate the trend signal
-    trend_signal = np.sign(short_mavg - long_mavg)
-
-    # Adjust positions based on trend signal, RSI, and normalized returns
-    trend_scaled_positions = 5000 * normalized_ret * trend_signal / prcSoFar[:, -1]
-
-    # Adjust positions based on RSI (mean-reversion)
-    rsi_signal = np.where(rsi > overbought_threshold, -1, np.where(rsi < oversold_threshold, 1, 0))
-    rsi_scaled_positions = 5000 * normalized_ret * rsi_signal / prcSoFar[:, -1]
-
-    # Combine trend and mean-reversion signals
-    combined_positions = (trend_scaled_positions + rsi_scaled_positions) / 2
-
-    # Scale positions by volatility (to avoid too large positions in volatile instruments)
-    combined_positions /= volatility
-
-    # Risk management: Limit maximum position size
-    max_shares = position_limit / prcSoFar[:, -1]
-    combined_positions = np.clip(combined_positions, -max_shares, max_shares)
-
-    # Convert to integer positions
-    rpos = np.array([int(x) for x in combined_positions])
-
-    # Enforce the $10k position limit per stock
-    for i in range(nIns):
-        current_value = currentPos[i] * prcSoFar[i, -1]
-        new_position = currentPos[i] + rpos[i]
-        new_value = new_position * prcSoFar[i, -1]
-        if abs(new_value) > position_limit:
-            allowed_shares = position_limit / prcSoFar[i, -1]
-            rpos[i] = int(np.sign(new_position) * allowed_shares - currentPos[i])
-
-    # Apply holding period and price movement threshold to reduce trading frequency
-    for i in range(nIns):
-        if nt - last_trade_time[i] < holding_period or abs(lastRet[i]) < price_threshold:
-            rpos[i] = 0  # No trade if within holding period or price movement is insignificant
-
-    # Update current positions
-    currentPos += rpos
-
-    # Update last trade time for instruments where trades were made
-    for i in range(nIns):
-        if rpos[i] != 0:
-            last_trade_time[i] = nt
-
-    return currentPos
-
-# Example usage:
-# prcSoFar = np.random.rand(50, 100) * 100  # Random price data for testing
-# currentPos = getMyPosition(prcSoFar)
-# print("Current Positions:", currentPos)
+    return newPos
