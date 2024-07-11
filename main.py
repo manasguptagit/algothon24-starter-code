@@ -15,7 +15,7 @@ rsi_period = 14
 overbought_threshold = 70
 oversold_threshold = 30
 commission_rate = 0.0010
-position_limit = 50000  # Increased position limit to allow for larger positions
+position_limit = 5000  # Increased position limit to allow for larger positions
 fibonacci_lookback = 30
 bollinger_band_period = 20
 stochastic_period = 14
@@ -32,8 +32,8 @@ stochastic_weight = 3
 macd_weight = 3
 
 # Risk management parameters
-stop_loss_threshold = 0.015  # Slightly tighter stop loss to reduce risk
-take_profit_threshold = 0.05  # Increased take profit threshold
+stop_loss_threshold = 0.02  # Slightly tighter stop loss to reduce risk
+take_profit_threshold = 0.04  # Increased take profit threshold
 
 # Helper functions for indicators
 def calculate_moving_average(prices, period):
