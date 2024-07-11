@@ -5,8 +5,8 @@ import pandas as pd
 short_lookback = 10
 long_lookback = 30
 rsi_period = 14
-overbought_threshold = 70
-oversold_threshold = 30
+overbought_threshold = 80
+oversold_threshold = 20
 commission_rate = 0.0010
 position_limit = 10000
 fibonacci_lookback = 30
@@ -17,16 +17,16 @@ macd_long_period = 26
 macd_signal_period = 9
 
 # Weights for the signals
-momentum_weight = 9
+momentum_weight = 10
 rsi_weight = 3
 fibonacci_weight = 2
-bollinger_weight = 1
+bollinger_weight = 4
 stochastic_weight = 2
 macd_weight = 2
 
 # Risk management parameters
-stop_loss_threshold = 0.02  # 2% stop loss
-take_profit_threshold = 0.04  # 4% take profit
+stop_loss_threshold = 0.010  # 2% stop loss
+take_profit_threshold = 0.035  # 4% take profit
 
 def calculate_moving_average(prices, period):
     if len(prices) < period:
@@ -85,78 +85,6 @@ def calculate_macd(prices, short_period, long_period, signal_period):
     macd = short_ema - long_ema
     signal = pd.Series(macd).ewm(span=signal_period, min_periods=signal_period).mean().values
     return macd[-1], signal[-1]
-
-# def getMyPosition(prcSoFar):
-#     nInst, t = prcSoFar.shape
-#     newPos = np.zeros(nInst)
-    
-#     for i in range(nInst):
-#         prices = prcSoFar[i, :]
-
-#         # Calculate indicators
-#         momentum = prices[-1] - prices[-short_lookback] if t >= short_lookback else 0
-#         rsi = calculate_rsi(prices, rsi_period)
-#         fibonacci_levels = calculate_fibonacci_levels(prices, fibonacci_lookback)
-#         upper_band, sma, lower_band = calculate_bollinger_bands(prices, bollinger_band_period)
-#         stochastic_k = calculate_stochastic_oscillator(prices, stochastic_period)
-#         macd, signal = calculate_macd(prices, macd_short_period, macd_long_period, macd_signal_period)
-
-#         # Calculate signals
-#         momentum_signal = np.sign(momentum)
-#         rsi_signal = -1 if rsi > overbought_threshold else (1 if rsi < oversold_threshold else 0)
-#         fibonacci_signal = 1 if prices[-1] < fibonacci_levels[2] else -1
-#         bollinger_signal = 1 if prices[-1] < lower_band else (-1 if prices[-1] > upper_band else 0)
-#         stochastic_signal = 1 if stochastic_k < 20 else (-1 if stochastic_k > 80 else 0)
-#         macd_signal = 1 if macd > signal else -1
-
-#         # Combine signals with weights
-#         combined_signal = (
-#             momentum_weight * momentum_signal +
-#             rsi_weight * rsi_signal +
-#             fibonacci_weight * fibonacci_signal +
-#             bollinger_weight * bollinger_signal +
-#             stochastic_weight * stochastic_signal +
-#             macd_weight * macd_signal
-#         )
-
-#         # Adjust position size based on volatility (standard deviation of prices)
-#         if t >= long_lookback:
-#             vol = np.std(prices[-long_lookback:])
-#         else:
-#             vol = np.std(prices)
-
-#         if vol != 0:
-#             position_size = min(position_limit, max(1, int(position_limit / vol)))
-#         else:
-#             position_size = position_limit
-
-#         # Determine position with dynamic sizing
-#         if combined_signal > 0:
-#             newPos[i] = position_size  # Buy
-#         elif combined_signal < 0:
-#             newPos[i] = -position_size  # Sell
-#         else:
-#             newPos[i] = 0  # Hold
-
-#         # Apply risk management
-#         if newPos[i] > 0:  # Long position
-#             entry_price = prices[-1]
-#             stop_loss_price = entry_price * (1 - stop_loss_threshold)
-#             take_profit_price = entry_price * (1 + take_profit_threshold)
-#         elif newPos[i] < 0:  # Short position
-#             entry_price = prices[-1]
-#             stop_loss_price = entry_price * (1 + stop_loss_threshold)
-#             take_profit_price = entry_price * (1 - take_profit_threshold)
-
-#         if newPos[i] != 0:
-#             for j in range(t):
-#                 if (newPos[i] > 0 and (prices[j] <= stop_loss_price or prices[j] >= take_profit_price)) or \
-#                    (newPos[i] < 0 and (prices[j] >= stop_loss_price or prices[j] <= take_profit_price)):
-#                     newPos[i] = 0
-#                     break
-
-#     return newPos
-
 
 def getMyPosition(prcSoFar):
     nInst, t = prcSoFar.shape
@@ -218,44 +146,3 @@ def getMyPosition(prcSoFar):
 
     return newPos
 
-    nInst, t = prcSoFar.shape
-    newPos = np.zeros(nInst)
-
-    for i in range(nInst):
-        prices = prcSoFar[i, :]
-
-        # Calculate indicators
-        momentum = prices[-1] - prices[-short_lookback] if t >= short_lookback else 0
-        rsi = calculate_rsi(prices, rsi_period)
-        fibonacci_levels = calculate_fibonacci_levels(prices, fibonacci_lookback)
-        upper_band, sma, lower_band = calculate_bollinger_bands(prices, bollinger_band_period)
-        stochastic_k = calculate_stochastic_oscillator(prices, stochastic_period)
-        macd, signal = calculate_macd(prices, macd_short_period, macd_long_period, macd_signal_period)
-
-        # Calculate signals
-        momentum_signal = np.sign(momentum)
-        rsi_signal = -1 if rsi > overbought_threshold else (1 if rsi < oversold_threshold else 0)
-        fibonacci_signal = 1 if prices[-1] < fibonacci_levels[2] else -1
-        bollinger_signal = 1 if prices[-1] < lower_band else (-1 if prices[-1] > upper_band else 0)
-        stochastic_signal = 1 if stochastic_k < 20 else (-1 if stochastic_k > 80 else 0)
-        macd_signal = 1 if macd > signal else -1
-
-        # Combine signals with weights
-        combined_signal = (
-            momentum_weight * momentum_signal +
-            rsi_weight * rsi_signal +
-            fibonacci_weight * fibonacci_signal +
-            bollinger_weight * bollinger_signal +
-            stochastic_weight * stochastic_signal +
-            macd_weight * macd_signal
-        )
-
-        # Determine position
-        if combined_signal > 0:
-            newPos[i] = 1  # Buy
-        elif combined_signal < 0:
-            newPos[i] = -1  # Sell
-        else:
-            newPos[i] = 0  # Hold
-
-    return newPos
